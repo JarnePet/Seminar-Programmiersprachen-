@@ -6,7 +6,7 @@ require 'etc'
 require 'benchmark'
 require 'colorize'
 
-options = {}
+options = { after_context: 0, before_context: 0 }
 OptionParser.new do |opts|
     opts.banner = "Usage: searcher [OPTIONS] PATTERN [PATH ...]"
     opts.on("-A", "--after-context LINES", Integer, "Prints the given number of following lines for each match") do |a|
@@ -49,12 +49,15 @@ def search_file(file, pattern, options)
     line_number = 0
     line_buffer = []
     printed_lines = {}
+    context_before = []
+    context_after = []
+   
+    
 
     pattern = pattern.encode('UTF-8')
     pattern_without_w = pattern.gsub('\w', '[\p{L}\p{N}_à]')
-    pattern_regex = options[:ignore_case] ? Regexp.new(pattern_without_w.to_s, Regexp::IGNORECASE) : Regexp.new(pattern_without_w)
-
-    File.open(file, 'r:UTF-8')  do |f|
+    pattern_regex = options[:ignore_case] ? Regexp.new(pattern_without_w.to_s, Regexp::IGNORECASE) : Regexp.new(pattern_without_w)    
+    File.open(file, 'r:UTF-8')  do |f| 
         while chunk = f.read(chunk_size)
             lines = chunk.split("\n")
             line_buffer ||= ""
@@ -62,64 +65,88 @@ def search_file(file, pattern, options)
             if chunk.end_with?("\n")
                 line_buffer = ""
             else
-                line_buffer = lines.pop
+                
+                line_buffer = f.eof? ? "" : lines.pop
             end
-            lines.each do |line|
+            lines.each_with_index do |line, index|
+            
                 line_number += 1
                 line = line.force_encoding('UTF-8') if pattern.include?('\w')|| pattern.include?('\s')
                 line = line.scrub("?") if pattern.include?('\w')
-                        
-                    if line.match(pattern_regex)
+
+                
+                context_before.shift if context_before.size > options[:before_context]&& options[:before_context]
+
+                
+                if line.match(pattern_regex)
                     next if binary_file?(file)
-                        line = line.gsub(pattern_regex) { |match| match.red } if options[:color]
-                        if options[:before_context]
-                            (line_number - options[:before_context]..line_number-1).each do |n|
-                                if printed_lines["#{file}-#{n-1}-#{lines[n-2]}"]
-                                            puts "--"
-                                end
-                                line2 = "#{file}-#{n}-#{File.readlines(file)[n - 1]}"
-                                line1 = "#{file}-#{n+1}-#{File.readlines(file)[n]}"
-                                if line_number <= options[:before_context] 
-                                unless n == -1 ||line1.match(pattern_regex)
-                                            
-                                puts line1
-                                printed_lines[line1] = true
-                                end
-                            end
-                                unless printed_lines[line2] || line2.match(pattern_regex)|| line_number <= options[:before_context] 
-                                puts line2
-                                            
-                                printed_lines[line2] = true
-                                end
-                                        
-                                break if n < 1
-                                end
-                            end
-                        if options[:after_context]
-                            (line_number + 1..line_number + options[:after_context]).each do |n|
-                            line3 = File.readlines(file)[n - 1]
-                            break if line3.nil? || line3.match(pattern_regex)
-                            line3 = "#{file}-#{n}-#{File.readlines(file)[n - 1]}"
-                            unless printed_lines[line3] || line3.match(pattern_regex)
-                                puts line3
-                                printed_lines[line3] = true
-                                end
-                            end
-                            end
-                        if options[:no_heading]
-                            puts "#{file}:#{line_number}:#{line}"
-                        else
-                            puts "#{file}"
-                            puts "#{line_number}:#{line}"
+                    line = line.gsub(pattern_regex) { |match| match.red } if options[:color]
+
+                    if options[:before_context]
+                    context_before.each_with_index do |context_line, i|
+                        linen = line_number - context_before.size + i
+                        output_line = "#{file}-#{line_number - context_before.size + i}-#{context_line}"
+                        unless printed_lines[output_line]||context_line.match(pattern_regex)||printed_lines[linen]
+                            puts output_line
+                            printed_lines[output_line] = true
+                        end
+                    end
+                    end
+
+                    
+                    if options[:no_heading]
+                        puts "#{file}:#{line_number}:#{line}"
+                       
+                    else
+                        puts "#{file}"
+                        puts "#{line_number}:#{line}"
+                        
+                    end
+
+                    
+                    if options[:after_context]
+                    (1..options[:after_context]).each do |i|
+                        context_line = lines[index + i] if index + i < lines.size
+                        linen = line_number + i
+                    
+                        begin
+                            output_line = "#{file}-#{line_number + i}-#{context_line}"
                             
+                            unless printed_lines[linen] || context_line.match(pattern_regex)||context_line.nil?
+                                puts output_line
+                                printed_lines[linen] = true
+                            end
+                        rescue NoMethodError
+                           
+                            total_lines = `wc -l "#{file}"`.strip.split(' ')[0].to_i
+                            total_lines += 1 unless `tail -c 1 "#{file}"` == "\n"
+                            line4 = "#{file}-#{line_number + i}-#{File.readlines(file)[line_number + i - 1]}"
+                            if line_number + i <= total_lines && !printed_lines[output_line] && !line4.match(pattern_regex)&& !printed_lines[line4] 
+                            puts line4
+                            
+                            printed_lines[linen] = true
+                            printed_lines[output_line] = true
+                            
+                            end
+                            if line_number + i == total_lines && !printed_lines[line4] && !line4.match(pattern_regex)&& !printed_lines[linen] 
+                                puts output_line
+                                
+                                printed_lines[linen] = true
+                                printed_lines[line4] = true
+                            end
                         end
                     end
                     end
                 end
-             end
+                    
+
+                context_before << line if options[:before_context]
+                
+            end
             
-        end
-    
+    end
+end
+end
 
 
 if File.directory?(path)
