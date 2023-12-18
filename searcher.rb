@@ -53,10 +53,9 @@ def search_file(file, pattern, options)
     context_after = []
    
     
-
-    pattern = pattern.encode('UTF-8')
+    pattern = pattern.encode('UTF-8').downcase
     pattern_without_w = pattern.gsub('\w', '[\p{L}\p{N}_à]')
-    pattern_regex = options[:ignore_case] ? Regexp.new(pattern_without_w.to_s, Regexp::IGNORECASE) : Regexp.new(pattern_without_w)    
+    pattern_regex = Regexp.new(pattern_without_w)   
     File.open(file, 'r:UTF-8')  do |f| 
         while chunk = f.read(chunk_size)
             lines = chunk.split("\n")
@@ -71,8 +70,9 @@ def search_file(file, pattern, options)
             lines.each_with_index do |line, index|
             
                 line_number += 1
-                line = line.force_encoding('UTF-8') if pattern.include?('\w')|| pattern.include?('\s')
-                line = line.scrub("?") if pattern.include?('\w')
+                
+                line = line.force_encoding('UTF-8').downcase if options[:ignore_case]
+
 
                 
                 context_before.shift if context_before.size > options[:before_context]&& options[:before_context]
@@ -80,6 +80,8 @@ def search_file(file, pattern, options)
                 
                 if line.match(pattern_regex)
                     next if binary_file?(file)
+                    line = line.force_encoding('UTF-8') if pattern.include?('\w')|| pattern.include?('\s')
+                    line = line.scrub("?") if pattern.include?('\w')
                     line = line.gsub(pattern_regex) { |match| match.red } if options[:color]
 
                     if options[:before_context]
@@ -159,4 +161,6 @@ num_processes = Etc.nprocessors
 Parallel.each(files, in_processes: num_processes) do |file|
     search_file(file, pattern, options)
 end
+  
+
   
