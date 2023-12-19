@@ -26,7 +26,7 @@ OptionParser.new do |opts|
         options[:hidden] = h
     end
     opts.on("-i", "--ignore-case", "Search case insensitive") do |i|
-        options[:ignore_case] = i
+        options[:ignore_case] = true
     end
     opts.on("--no-heading", "Prints a single line including the filename for each match, instead of grouping matches by file") do |nh|
         options[:no_heading] = true
@@ -52,11 +52,25 @@ def search_file(file, pattern, options)
     context_before = []
     context_after = []
    
+   
+
     
 
-    pattern = pattern.encode('UTF-8')
-    pattern_without_w = pattern.gsub('\w', '[\p{L}\p{N}_à]')
-    pattern_regex = options[:ignore_case] ? Regexp.new(pattern_without_w.to_s, Regexp::IGNORECASE) : Regexp.new(pattern_without_w)    
+    if options[:ignore_case] && pattern.include?('\w') && pattern.include?('\s')
+        pattern = pattern.encode('UTF-8').downcase 
+        pattern_without_w = pattern.gsub('\w', '[\p{L}\p{N}_à]')
+        
+        pattern_regex = Regexp.new(pattern_without_w)  
+       
+    else
+        pattern = pattern.encode('UTF-8')
+        pattern_without_w = pattern.gsub('\w', '[\p{L}\p{N}_à]')
+        pattern_regex = options[:ignore_case] ? Regexp.new(pattern_without_w.to_s, Regexp::IGNORECASE) : Regexp.new(pattern_without_w)    
+        
+    
+    end
+
+    
     File.open(file, 'r:UTF-8')  do |f| 
         while chunk = f.read(chunk_size)
             lines = chunk.split("\n")
@@ -71,15 +85,24 @@ def search_file(file, pattern, options)
             lines.each_with_index do |line, index|
             
                 line_number += 1
-                line = line.force_encoding('UTF-8') if pattern.include?('\w')|| pattern.include?('\s')
-                line = line.scrub("?") if pattern.include?('\w')
+                if options[:ignore_case] && pattern.include?('\w') && pattern.include?('\s')
+                    line2 = line.force_encoding('UTF-8').scrub("?").downcase
+                elsif pattern.include?('\w') || pattern.include?('\s')
+                    line2 = line.force_encoding('UTF-8')
+                elsif pattern.include?('\w')
+                    line2 = line.scrub("?")
+                else
+                    line2 = line
+                end
 
                 
                 context_before.shift if context_before.size > options[:before_context]&& options[:before_context]
 
                 
-                if line.match(pattern_regex)
+                if line2.match(pattern_regex)
                     next if binary_file?(file)
+                    
+                    
                     line = line.gsub(pattern_regex) { |match| match.red } if options[:color]
 
                     if options[:before_context]
