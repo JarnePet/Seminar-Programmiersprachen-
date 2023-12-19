@@ -88,7 +88,7 @@ def search_file(file, pattern, options)
                 if options[:ignore_case] && pattern.include?('\w') && pattern.include?('\s')
                     line2 = line.force_encoding('UTF-8').scrub("?").downcase
                 elsif pattern.include?('\w') || pattern.include?('\s')
-                    line2 = line.force_encoding('UTF-8')
+                    line2 = line.force_encoding('UTF-8').scrub("?")
                 elsif pattern.include?('\w')
                     line2 = line.scrub("?")
                 else
