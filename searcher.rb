@@ -51,7 +51,7 @@ def search_file(file, pattern, options)
     printed_lines = {}
     context_before = []
     context_after = []
-   
+    filename = file
    
 
     
@@ -82,9 +82,12 @@ def search_file(file, pattern, options)
                 
                 line_buffer = f.eof? ? "" : lines.pop
             end
+            last_match_line = 0
+           
             lines.each_with_index do |line, index|
             
                 line_number += 1
+                
                 if options[:ignore_case] && pattern.include?('\w') && pattern.include?('\s')
                     line2 = line.force_encoding('UTF-8').scrub("?").downcase
                 elsif pattern.include?('\w') || pattern.include?('\s')
@@ -101,11 +104,16 @@ def search_file(file, pattern, options)
                 
                 if line2.match(pattern_regex)
                     next if binary_file?(file)
+
+                    
                     
                     
                     line = line.gsub(pattern_regex) { |match| match.red } if options[:color]
 
                     if options[:before_context]
+                    if line_number - options[:before_context]-1 > last_match_line.to_i 
+                        puts "--" 
+                    end
                     context_before.each_with_index do |context_line, i|
                         linen = line_number - context_before.size + i
                         output_line = "#{file}-#{line_number - context_before.size + i}-#{context_line}"
@@ -119,7 +127,7 @@ def search_file(file, pattern, options)
                     
                     if options[:no_heading]
                         puts "#{file}:#{line_number}:#{line}"
-                       
+                        
                     else
                         puts "#{file}"
                         puts "#{line_number}:#{line}"
@@ -156,16 +164,24 @@ def search_file(file, pattern, options)
                                 
                                 printed_lines[linen] = true
                                 printed_lines[line4] = true
+                                
                             end
+                            
                         end
+                        
                     end
-                    end
+               
+                end
+                last_match_line = line_number
+                
                 end
                     
-
-                context_before << line if options[:before_context]
                 
+                context_before << line if options[:before_context]
+              
+              
             end
+               
             
     end
 end
